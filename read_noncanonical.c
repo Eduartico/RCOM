@@ -21,6 +21,12 @@
 
 #define BUF_SIZE 256
 
+// SET buffer values
+#define FLAG 72
+#define A    3
+#define C    3
+#define BCC  (A^C)
+
 volatile int STOP = FALSE;
 
 int main(int argc, char *argv[])
@@ -90,25 +96,35 @@ int main(int argc, char *argv[])
 
     // Loop for input
     unsigned char buf[BUF_SIZE + 1] = {0}; // +1: Save space for the final '\0' char
-   
-    int i = 0;
+    unsigned char cmp[] = {FLAG, A, C, BCC, FLAG}; // Comparison buffer
+    int i = 0; // Counter variable
     
     while (STOP == FALSE)
-    {
+    {         
         // Returns after 1 chars have been input
         int bytes = read(fd, &buf[i], 1);
         
+        if(buf[i] == cmp[i])
+            i++;
+        else {
+            i = 0;
+            memset(buf, 0, sizeof(buf));
+        }
+        if(i >= 5)
+            STOP = TRUE;
         
         buf[i+1] = '\0'; // Set end of string to '\0', so we can printf
 
-        printf(":%c:%d\n", buf[i], bytes);
+        printf(":%u:%d\n", buf[i], bytes);
+        /*
         if (buf[i] == '.')
             STOP = TRUE;
         else
             i++;
+        */
             
     }
-    
+    printf("Read successful");
     // Write back to sender
     int bytes2 = write(fd, buf, sizeof(buf));
     printf("%d bytes written\n", bytes2);
