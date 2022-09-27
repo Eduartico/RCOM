@@ -23,9 +23,9 @@
 
 
 // SET buffer values
-#define FLAG 01111110
-#define A    00000011
-#define C    00000011
+#define FLAG 72
+#define A    3
+#define C    3
 #define BCC  (A^C)
 
 volatile int STOP = FALSE;
@@ -112,7 +112,7 @@ int main(int argc, char *argv[])
 
     // Wait until all bytes have been written to the serial port
     sleep(1);
-    
+    /*
     // Read back from the receiver
     memset(buf, 0, BUF_SIZE);
     int i = 0;
@@ -129,7 +129,7 @@ int main(int argc, char *argv[])
         else
            i++;
     }
-    
+*/    
     // Restore the old port settings
     if (tcsetattr(fd, TCSANOW, &oldtio) == -1)
     {
