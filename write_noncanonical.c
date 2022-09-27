@@ -21,6 +21,13 @@
 
 #define BUF_SIZE 256
 
+
+// SET buffer values
+#define FLAG 01111110
+#define A    00000011
+#define C    00000011
+#define BCC  (A^C)
+
 volatile int STOP = FALSE;
 
 int main(int argc, char *argv[])
@@ -90,19 +97,17 @@ int main(int argc, char *argv[])
     printf("New termios structure set\n");
 
     // Create string to send
-    unsigned char buf[BUF_SIZE] = {0};
-    unsigned char test[] = "Hello world.";
+    //unsigned char buf[BUF_SIZE] = {0};
+    //unsigned char test[] = "Hello world.";
+    unsigned char buffer[] = {FLAG, A, C, BCC, FLAG};
+    /*
     for (int i = 0; i < BUF_SIZE; i++)
     {
         buf[i] = 'a' + i % 26;
     }
+    */
 
-    // In non-canonical mode, '\n' does not end the writing.
-    // Test this condition by placing a '\n' in the middle of the buffer.
-    // The whole buffer must be sent even with the '\n'.
-    buf[5] = '\n';
-
-    int bytes = write(fd, test, sizeof(test));
+    int bytes = write(fd, buffer, sizeof(buffer));
     printf("%d bytes written\n", bytes);
 
     // Wait until all bytes have been written to the serial port
