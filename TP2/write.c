@@ -23,7 +23,7 @@
 
 
 // SET buffer values
-#define FLAG 72
+#define FLAG 126
 #define A    3
 #define C    3
 #define BCC  (A^C)
