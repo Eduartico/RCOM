@@ -22,7 +22,7 @@
 #define BUF_SIZE 256
 
 // SET buffer values
-#define FLAG 72
+#define FLAG 126
 #define A    3
 #define C    3
 #define BCC  (A^C)
@@ -113,9 +113,9 @@ int main(int argc, char *argv[])
         if(i >= 5)
             STOP = TRUE;
         
-        buf[i+1] = '\0'; // Set end of string to '\0', so we can printf
-
-        printf(":%u:%d\n", buf[i], bytes);
+        //buf[i+1] = '\0'; // Set end of string to '\0', so we can printf
+        //int edu = &buf[i];
+        printf(":%d\n", buf[i-1]);
         /*
         if (buf[i] == '.')
             STOP = TRUE;
@@ -124,12 +124,13 @@ int main(int argc, char *argv[])
         */
             
     }
-    printf("Read successful");
+    printf("Read successful\n");
     // Write back to sender
     int bytes2 = write(fd, buf, sizeof(buf));
-    printf("%d bytes written\n", bytes2);
+    printf("Writeback successful\n");
+        
+    //sleep(0);
     
-    sleep(1);
     
     // The while() cycle should be changed in order to respect the specifications
     // of the protocol indicated in the Lab guide
