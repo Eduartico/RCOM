@@ -23,9 +23,9 @@
 
 
 // SET buffer values
-#define FLAG 126
-#define A    3
-#define C    3
+#define FLAG 0x7E
+#define A    0x03
+#define C    0x03
 #define BCC  (A^C)
 
 volatile int STOP = FALSE;
@@ -74,8 +74,8 @@ int main(int argc, char *argv[])
 
     // Set input mode (non-canonical, no echo,...)
     newtio.c_lflag = 0;
-    newtio.c_cc[VTIME] = 0; // Inter-character timer unused
-    newtio.c_cc[VMIN] = 1;  // Blocking read until 1 chars received
+    newtio.c_cc[VTIME] = 30; // Inter-character timer unused
+    newtio.c_cc[VMIN] = 0;  // Blocking read until 1 chars received
 
     // VTIME e VMIN should be changed in order to protect with a
     // timeout the reception of the following character(s)
@@ -97,9 +97,9 @@ int main(int argc, char *argv[])
     printf("New termios structure set\n");
 
     // Create string to send
-    //unsigned char buf[BUF_SIZE] = {0};
+    unsigned char buf[BUF_SIZE] = {0};
     //unsigned char test[] = "Hello world.";
-    unsigned char buffer[] = {FLAG, A, C, BCC, FLAG};
+    unsigned char buffer[] = {FLAG, A, BCC, BCC, FLAG};
     /*
     for (int i = 0; i < BUF_SIZE; i++)
     {
@@ -109,27 +109,44 @@ int main(int argc, char *argv[])
 
     int bytes = write(fd, buffer, sizeof(buffer));
     printf("%d bytes written\n", bytes);
-
-    // Wait until all bytes have been written to the serial port
+    
     sleep(1);
-    /*
+    
     // Read back from the receiver
     memset(buf, 0, BUF_SIZE);
+    unsigned char cmp[] = {FLAG, A, C, BCC, FLAG}; // Comparison buffer
     int i = 0;
+    
     while (STOP == FALSE)
-    {
+    {         
         // Returns after 1 chars have been input
         int bytes = read(fd, &buf[i], 1);
+        if(bytes == 0) {
+            write(fd, buffer, sizeof(buffer));
+            sleep(1);    
+        }
+        
+        if(buf[i] == cmp[i])
+            i++;
+        else {
+            i = 0;
+            memset(buf, 0, sizeof(buf));
+        }
+        if(i >= 5)
+            STOP = TRUE;
         
         buf[i+1] = '\0'; // Set end of string to '\0', so we can printf
-        
-        printf(":%c:%d\n", buf[i], bytes);
+
+        printf(":%2x:%d\n", buf[i-1], bytes);
+        /*
         if (buf[i] == '.')
             STOP = TRUE;
         else
-           i++;
+            i++;
+        */
+            
     }
-*/    
+    printf("Readback successful\n");
     // Restore the old port settings
     if (tcsetattr(fd, TCSANOW, &oldtio) == -1)
     {
