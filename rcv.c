@@ -143,13 +143,11 @@ int change_read_stateI(char byte, int n) {
         case START:
             if (byte == FLAG) {
                 read_state = FLAG_RCV;
-                printf("Flag byte 1 received.\n");
             }
             break;
         case FLAG_RCV:
             if (byte == A_TR) {
                 read_state = A_RCV;
-                printf("A byte received.\n");
             }
             else if(byte != FLAG)
                 read_state = START;
@@ -157,8 +155,10 @@ int change_read_stateI(char byte, int n) {
         case A_RCV:
             if(byte == C_I(n) {
                 read_state = C_RCV;
-                printf("C byte received.\n");
             }
+            else if (byte == C_I(n^1)) //esperava 0, recebeu 1 (ou vice-versa)
+                //repetido = true
+                read_state = C_RCV;
             else if (byte != FLAG)
                 read_state = START;
             else
@@ -167,7 +167,6 @@ int change_read_stateI(char byte, int n) {
         case C_RCV:
             if (byte == A_TR^C_I(n)) {
                 read_state = BCC1_OK;
-                printf("BCC1 byte received.\n");
             }
             else if (byte != FLAG)
                 read_state = START;
@@ -175,9 +174,36 @@ int change_read_stateI(char byte, int n) {
                 read_state = FLAG_RCV;
             break;
         case BCC1_OK:
-            if (byte == BCC2) {
+                bcc2 = byte
+                n = 1
+                read_state = READ;
+        case READ:
+            if (byte == FLAG) {
+                read_state = BCC2_ERROR
+                }
+            else if (byte == BCC2)
+                read_state = BCC2_OK;
+            else
+                //add byte to framei.data array
+                bcc2 = BCC2^byte;
+                if (bbc2 == flag) 
+                    //read_state = STUFF_CHECK (?)
+            break;
+        case BCC2_OK:
+            if (byte == FLAG) {
                 STOP = TRUE;
-                printf("Flag byte 2 received.\n");
+                //send RR
+                //add framei obj to read_messages array
+                n = n^1
+            }
+            else
+                read_state = START;
+            break;
+        case BCC2_ERROR:
+            if (byte == FLAG) {
+                STOP = TRUE;
+                //if (repetido), send RR
+                //else, send REJ
             }
             else
                 read_state = START;
