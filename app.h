@@ -1,3 +1,4 @@
+
 #define MAX_SIZE 256
 
 // Field frame values
@@ -6,13 +7,14 @@
 #define A_RC    0x01        // Address field in commands sent by the Receiver and replies sent by the Transmitter
 #define C_SET   0x03        // Control field for set up (SET)
 #define C_UA    0x07        // Control field for unnumbered acknowledgment (UA)
+#define 
 
 // Frame formats
 const unsigned char SET[] = {FLAG, A_TR, C_SET, A_TR^C_SET, FLAG};
 const unsigned char UA[] = {FLAG, A_TR, C_UA, A_TR^C_UA, FLAG};
 
 // State enum for state machine
-typedef enum {START, FLAG_RCV, A_RCV, C_RCV, BCC_OK} state_t;
+typedef enum {START, FLAG_RCV, A_RCV, C_RCV, BCC1_OK, DATA, BCC2_OK} state_t;
 
 // Format type enum
 typedef enum {INFO, SUPER, UNNUM} format_t;
@@ -25,6 +27,26 @@ typedef struct linkLayer {
     unsigned int numTransmissions;  // Number of retries in case of failure
     char frame[MAX_SIZE];           // Frame
 } linkLayer_t;
+
+// Protocol data structure
+typedef struct FrameI {
+    unsigned char F;   
+    unsigned char A;           
+    unsigned char C;    
+    char D[MAX_SIZE];    
+    unsigned char BCC1;    
+    unsigned char BCC2;           
+} FrameI_t;
+
+// Protocol data structure
+typedef struct FrameSU {
+    unsigned char F;   
+    unsigned char A;           
+    unsigned char C;    
+    unsigned char BCC1;         
+} FrameSU_t;
+
+
 
 // Data link functions
 int setup_port();

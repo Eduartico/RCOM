@@ -85,11 +85,11 @@ int new_port_settings(int fd) {
     return 0;
 }
 
-int make_frame(format_t type, int cmd) {
-    unsigned char frame[MAX_SIZE] = {0};
+framei_t make_framei(framei_t frame) {
+    frame.;
 }
 
-int change_read_state(char byte) {
+int change_read_stateSU(char byte) {
     switch(read_state) {
         case START:
             if (byte == FLAG) {
@@ -127,6 +127,55 @@ int change_read_state(char byte) {
             break;
         case BCC_OK:
             if (byte == FLAG) {
+                STOP = TRUE;
+                printf("Flag byte 2 received.\n");
+            }
+            else
+                read_state = START;
+            break;
+        default:
+            break;
+        }
+}
+
+int change_read_stateI(char byte, int n) {
+    switch(read_state) {
+        case START:
+            if (byte == FLAG) {
+                read_state = FLAG_RCV;
+                printf("Flag byte 1 received.\n");
+            }
+            break;
+        case FLAG_RCV:
+            if (byte == A_TR) {
+                read_state = A_RCV;
+                printf("A byte received.\n");
+            }
+            else if(byte != FLAG)
+                read_state = START;
+            break;
+        case A_RCV:
+            if(byte == C_I(n) {
+                read_state = C_RCV;
+                printf("C byte received.\n");
+            }
+            else if (byte != FLAG)
+                read_state = START;
+            else
+                read_state = FLAG_RCV;
+            break;
+        case C_RCV:
+            if (byte == A_TR^C_I(n)) {
+                read_state = BCC1_OK;
+                printf("BCC1 byte received.\n");
+            }
+            else if (byte != FLAG)
+                read_state = START;
+            else
+                read_state = FLAG_RCV;
+            break;
+        case BCC1_OK:
+            if (byte == BCC2) {
                 STOP = TRUE;
                 printf("Flag byte 2 received.\n");
             }
