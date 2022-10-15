@@ -156,7 +156,7 @@ int change_read_stateI(char byte, int n) {
             if(byte == C_I(n) {
                 read_state = C_RCV;
             }
-            else if (byte == C_I(n^1)) //esperava 0, recebeu 1 (ou vice-versa)
+            else if (byte == C_I(n^1)) // esperava 0, recebeu 1 (ou vice-versa)
                 //repetido = true
                 read_state = C_RCV;
             else if (byte != FLAG)
@@ -184,10 +184,19 @@ int change_read_stateI(char byte, int n) {
             else if (byte == BCC2)
                 read_state = BCC2_OK;
             else
+
                 //add byte to framei.data array
-                bcc2 = BCC2^byte;
-                if (bbc2 == flag) 
-                    //read_state = STUFF_CHECK (?)
+                bcc2 = bcc2^byte;
+                if (bcc2 == 0x7d) 
+                    read_state = STUFF
+        case STUFF:
+                if(byte == 0x5e){
+                    byte = 0x7e
+                }
+                else {byte = 0x7d}
+                //add byte to framei.data array
+                bcc2 = bcc2^byte;
+                read_state = READ;
             break;
         case BCC2_OK:
             if (byte == FLAG) {
