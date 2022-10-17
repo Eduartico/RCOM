@@ -214,7 +214,7 @@ int llopen(LinkLayer connectionParameters)
 int llwrite(const unsigned char *buf, int bufSize)
 {
     // TODO
-
+    printf("Size = %d \n", bufSize);
     return 0;
 }
 
@@ -224,7 +224,10 @@ int llwrite(const unsigned char *buf, int bufSize)
 int llread(unsigned char *packet)
 {
     // TODO
-
+    packet[0] = 3;
+    packet[1] = 1;
+    packet[2] = 7;
+    strcpy((packet + 3), "penguin");
     return 0;
 }
 
