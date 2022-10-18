@@ -23,6 +23,7 @@ volatile int STOP = FALSE;
 static readState_t read_state = START;
 static LinkLayer protocol;
 static int fd;
+static int n;
 static struct termios oldtio;
 static struct termios newtio;
 ////////////////////////////////////////////////
@@ -224,10 +225,6 @@ int llwrite(const unsigned char *buf, int bufSize)
 int llread(unsigned char *packet)
 {
     // TODO
-    packet[0] = 3;
-    packet[1] = 1;
-    packet[2] = 7;
-    strcpy((packet + 3), "penguin");
     return 0;
 }
 
