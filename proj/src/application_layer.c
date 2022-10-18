@@ -29,7 +29,7 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
             char ctrl_pkg[] = {C(2), NAME, sizeof(filename)};
             strcat(ctrl_pkg, filename);
             
-            //llwrite(ctrl_pkg, sizeof(ctrl_pkg) + sizeof(filename));
+            llwrite(ctrl_pkg, sizeof(ctrl_pkg) + sizeof(filename));
             
             FILE* fptr = fopen(filename, "r");
             if(fptr == NULL) {
@@ -79,6 +79,7 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
                 printf("%d \n", rcv_pkg[0]);
                 switch(rcv_pkg[0]) {
                     case C(1):
+                        // write to file
                         break;
                     case C(2): ;
                         int i = 1;
@@ -108,5 +109,5 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
             break;
     }
         
-    //llclose(0);
+    llclose(0);
 }
