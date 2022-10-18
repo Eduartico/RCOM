@@ -94,13 +94,11 @@ int change_read_stateSU(char byte) {
         case START:
             if (byte == FLAG) {
                 read_state = FLAG_RCV;
-                printf("Flag byte 1 received.\n");
             }
             break;
         case FLAG_RCV:
             if (byte == A_TR) {
                 read_state = A_RCV;
-                printf("A byte received.\n");
             }
             else if(byte != FLAG)
                 read_state = START;
@@ -108,7 +106,6 @@ int change_read_stateSU(char byte) {
         case A_RCV:
             if(byte == C_SET) {
                 read_state = C_RCV;
-                printf("C byte received.\n");
             }
             else if (byte != FLAG)
                 read_state = START;
@@ -118,7 +115,6 @@ int change_read_stateSU(char byte) {
         case C_RCV:
             if (byte == A_TR^C_SET) {
                 read_state = BCC_OK;
-                printf("BCC byte received.\n");
             }
             else if (byte != FLAG)
                 read_state = START;
@@ -128,7 +124,6 @@ int change_read_stateSU(char byte) {
         case BCC_OK:
             if (byte == FLAG) {
                 STOP = TRUE;
-                printf("Flag byte 2 received.\n");
             }
             else
                 read_state = START;
@@ -139,6 +134,8 @@ int change_read_stateSU(char byte) {
 }
 
 int change_read_stateI(char byte, int n) {
+    unsigned char reply = 0x00;
+    int counter = 0;
     switch(read_state) {
         case START:
             if (byte == FLAG) {
@@ -157,8 +154,7 @@ int change_read_stateI(char byte, int n) {
                 read_state = C_RCV;
             }
             else if (byte == C_I(n^1)) // esperava 0, recebeu 1 (ou vice-versa)
-                //repetido = true
-                read_state = C_RCV;
+                read_state = DUPLICATE;
             else if (byte != FLAG)
                 read_state = START;
             else
@@ -175,6 +171,7 @@ int change_read_stateI(char byte, int n) {
             break;
         case BCC1_OK:
                 bcc2 = byte
+                counter++;
                 n = 1
                 read_state = READ;
         case READ:
@@ -184,25 +181,32 @@ int change_read_stateI(char byte, int n) {
             else if (byte == BCC2)
                 read_state = BCC2_OK;
             else
-
-                //add byte to framei.data array
-                bcc2 = bcc2^byte;
                 if (bcc2 == 0x7d) 
                     read_state = STUFF
+                else
+                    counter++;
+                    packet[counter] = byte;
+                    bcc2 = bcc2^byte;
         case STUFF:
                 if(byte == 0x5e){
                     byte = 0x7e
                 }
                 else {byte = 0x7d}
-                //add byte to framei.data array
+                counter++;
+                packet[counter] = byte;
                 bcc2 = bcc2^byte;
-                read_state = READ;
+                read_state = READ;  //back to normal
             break;
         case BCC2_OK:
             if (byte == FLAG) {
                 STOP = TRUE;
                 //send RR
-                //add framei obj to read_messages array
+                reply[7] = n;
+                reply[0] = 1;
+                reply[2] = 1;
+                char SET[] = {FLAG, A_TR, reply, A_TR^reply, FLAG};
+                write(fd, SET, sizeof(SET));
+                //
                 n = n^1
             }
             else
@@ -211,12 +215,24 @@ int change_read_stateI(char byte, int n) {
         case BCC2_ERROR:
             if (byte == FLAG) {
                 STOP = TRUE;
-                //if (repetido), send RR
-                //else, send REJ
+                //send REJ
+                reply[7] = n;
+                reply[0] = 1;
+                char SET[] = {FLAG, A_TR, reply, A_TR^reply, FLAG};
+                write(fd, SET, sizeof(SET));
+                //
             }
             else
                 read_state = START;
             break;
+        case DUPLICATE:
+            //send RR
+            reply[7] = n;
+            reply[0] = 1;
+            reply[2] = 1;
+            char SET[] = {FLAG, A_TR, reply, A_TR^reply, FLAG};
+            write(fd, SET, sizeof(SET));
+            //
         default:
             break;
         }
