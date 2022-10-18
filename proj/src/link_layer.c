@@ -216,7 +216,48 @@ int llopen(LinkLayer connectionParameters)
 int llwrite(const unsigned char *buf, int bufSize)
 {
     // TODO
-    printf("Size = %d \n", bufSize);
+    //construir trama i, lembrar de stuff
+    switch(read_state) {
+        case START:
+            if (byte == FLAG) {
+                read_state = FLAG_RCV;
+            }
+            break;
+        case FLAG_RCV:
+            if (byte == A_TR) {
+                read_state = A_RCV;
+            }
+            else if(byte != FLAG)
+                read_state = START;
+            break;
+        case A_RCV:
+            if(byte == C_SET) {
+                read_state = C_RCV;
+            }
+            else if (byte != FLAG)
+                read_state = START;
+            else
+                read_state = FLAG_RCV;
+            break;
+        case C_RCV:
+            if (byte == A_TR^C_SET) {
+                read_state = BCC_OK;
+            }
+            else if (byte != FLAG)
+                read_state = START;
+            else
+                read_state = FLAG_RCV;
+            break;
+        case BCC_OK:
+            if (byte == FLAG) {
+                STOP = TRUE;
+            }
+            else
+                read_state = START;
+            break;
+        default:
+            break;
+        }
     return 0;
 }
 
@@ -225,11 +266,108 @@ int llwrite(const unsigned char *buf, int bufSize)
 ////////////////////////////////////////////////
 int llread(unsigned char *packet)
 {
-    // TODO
-    packet[0] = 2;
-    packet[1] = 1;
-    packet[2] = 7;
-    strcpy((packet + 3), "penguin");
+    unsigned char reply = 0x00;
+    int counter = 0;
+    switch(read_state) {
+        case START:
+            if (byte == FLAG) {
+                read_state = FLAG_RCV;
+            }
+            break;
+        case FLAG_RCV:
+            if (byte == A_TR) {
+                read_state = A_RCV;
+            }
+            else if(byte != FLAG)
+                read_state = START;
+            break;
+        case A_RCV:
+            if(byte == C_I(n) {
+                read_state = C_RCV;
+            }
+            else if (byte == C_I(n^1)) // esperava 0, recebeu 1 (ou vice-versa)
+                read_state = DUPLICATE;
+            else if (byte != FLAG)
+                read_state = START;
+            else
+                read_state = FLAG_RCV;
+            break;
+        case C_RCV:
+            if (byte == A_TR^C_I(n)) {
+                read_state = BCC1_OK;
+            }
+            else if (byte != FLAG)
+                read_state = START;
+            else
+                read_state = FLAG_RCV;
+            break;
+        case BCC1_OK:
+                bcc2 = byte
+                counter++;
+                n = 1
+                read_state = READ;
+        case READ:
+            if (byte == FLAG) {
+                read_state = BCC2_ERROR
+                }
+            else if (byte == BCC2)
+                read_state = BCC2_OK;
+            else
+                if (bcc2 == 0x7d) 
+                    read_state = STUFF
+                else
+                    counter++;
+                    packet[counter] = byte;
+                    bcc2 = bcc2^byte;
+        case STUFF:
+                if(byte == 0x5e){
+                    byte = 0x7e
+                }
+                else {byte = 0x7d}
+                counter++;
+                packet[counter] = byte;
+                bcc2 = bcc2^byte;
+                read_state = READ;  //back to normal
+            break;
+        case BCC2_OK:
+            if (byte == FLAG) {
+                STOP = TRUE;
+                //send RR
+                reply[7] = n;
+                reply[0] = 1;
+                reply[2] = 1;
+                char SET[] = {FLAG, A_TR, reply, A_TR^reply, FLAG};
+                write(fd, SET, sizeof(SET));
+                //
+                n = n^1
+            }
+            else
+                read_state = START;
+            break;
+        case BCC2_ERROR:
+            if (byte == FLAG) {
+                STOP = TRUE;
+                //send REJ
+                reply[7] = n;
+                reply[0] = 1;
+                char SET[] = {FLAG, A_TR, reply, A_TR^reply, FLAG};
+                write(fd, SET, sizeof(SET));
+                //
+            }
+            else
+                read_state = START;
+            break;
+        case DUPLICATE:
+            //send RR
+            reply[7] = n;
+            reply[0] = 1;
+            reply[2] = 1;
+            char SET[] = {FLAG, A_TR, reply, A_TR^reply, FLAG};
+            write(fd, SET, sizeof(SET));
+            //
+        default:
+            break;
+        }
     return 0;
 }
 
