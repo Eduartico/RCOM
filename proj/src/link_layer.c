@@ -17,7 +17,7 @@
 #define A_RC     0x01        // Address field in commands sent by the Receiver and replies sent by the Transmitter
 #define C_SET    0x03        // Control field for set up (SET)
 #define C_UA     0x07        // Control field for unnumbered acknowledgment (UA)
-#define C_DISC   0x0e        // Control field for disconection (DISC)
+#define C_DISC   0x0b        // Control field for disconection (DISC)
 #define C_RR(n)  (((0x00 + (n)) << 7) + 0x05) // Control field for frame I positive acknowledgement (RR)
 #define C_REJ(n) (((0x00 + (n)) << 7) + 0x01) // Control field for frame I rejection (REJ)
 #define C_SEQ(n) ((0x00 + (n)) << 6) // Control field for data frame, n = sequence number
@@ -157,6 +157,8 @@ int llopen(LinkLayer connectionParameters)
             read_state = START;
             write(fd, SET, sizeof(SET));
         } while (STOP == FALSE && retransmissions > 0);
+        if(retransmissions == 0)
+            return -1;
         break;
         case(LlRx): ;
         read_state = START;
@@ -178,7 +180,7 @@ int llopen(LinkLayer connectionParameters)
                         read_state = START;
                     break;
                 case A_RCV:
-                    if(buf[0] == C_UA) {
+                    if(buf[0] == C_SET) {
                         read_state = C_RCV;
                         printf("C byte received.\n");
                     }
@@ -260,7 +262,7 @@ int llwrite(const unsigned char *buf, int bufSize)
         printf("%02x ", frame[j]);
     }
     
-    //write(fd, frame, i+1);
+    write(fd, frame, i+1);
     /*
     switch(read_state) {
         case START:
@@ -319,18 +321,18 @@ int llread(unsigned char *packet)
     int i = 0;  // current index
     int bcc2 = 0;
     do {
-        int bytes = read(fd, packet[i], 1);
+        int bytes = read(fd, &packet[i], 1);
         switch(read_state) {
             case START:
                 if (packet[i] == FLAG) {
                     read_state = FLAG_RCV;
-                    i++;
+                    printf("Flag I received \n");
                 }
                 break;
             case FLAG_RCV:
                 if (packet[i] == A_TR) {
                     read_state = A_RCV;
-                    i++;
+                    printf("A I received \n");
                 }
                 else if(packet[i] != FLAG) {
                     read_state = START;
@@ -341,44 +343,46 @@ int llread(unsigned char *packet)
             case A_RCV:
                 if(packet[i] == C_SEQ(n_seq)) {
                     read_state = C_RCV;
-                    i++;
+                    printf("C I received \n");
                 }
                 else if (packet[i] == C_SEQ(n_seq^1)) { // received duplicate frame
                     tcflush(fd, TCIOFLUSH);
-                    
+                    n_seq = n_seq^1;
                     unsigned char RR[] = {FLAG, A_TR, C_RR(n_seq), A_TR^C_RR(n_seq), FLAG};
                     write(fd, RR, sizeof(RR));
                     return -1;
                 }
                 else if (packet[i] != FLAG) {
                     read_state = START;
-                    i = 0;
                 }
                 else {
                     read_state = FLAG_RCV;
-                    i = 1;
                 }
                 break;
             case C_RCV:
                 if (packet[i] == A_TR^C_SEQ(n_seq)) {
                     read_state = DATA;
-                    i++;
+                    printf("BCC byte received \n");
                 }
                 else if (packet[i] != FLAG) {
                     read_state = START;
-                    i = 0;
                 }
                 else {
                     read_state = FLAG_RCV;
-                    i = 1;
                 }
                 break;
             case DATA:
-                if(packet[i] == FLAG) {    // FLAG received, implies BCC2 was incorrect, reject frame
-                    tcflush(fd, TCIOFLUSH);
-                    char REJ[] = {FLAG, A_TR, C_REJ(n_seq), A_TR^C_REJ(n_seq), FLAG};
-                    write(fd, REJ, sizeof(REJ));
-                    return -1;
+                if(packet[i] == FLAG) {
+                    if(bcc2 == 0)
+                        STOP = TRUE;
+                    else {
+                        printf("BCC2 error, rejected. \n");
+                        tcflush(fd, TCIOFLUSH);
+                        char REJ[] = {FLAG, A_TR, C_REJ(n_seq), A_TR^C_REJ(n_seq), FLAG};
+                        write(fd, REJ, sizeof(REJ));
+                        sleep(1);
+                        return -1;
+                    }
                 }
                 else if(packet[i] == ESC_OCT) {
                     read_state = STUFF;
@@ -386,43 +390,43 @@ int llread(unsigned char *packet)
                 } 
                 else {
                     bcc2 = bcc2^packet[i];
-                    if(bcc2 == 0) {
-                        read_state = BCC2_OK;
+                    i++;
                 }
                 break;
             case STUFF:
                     if(packet[i] == 0x5e){
                         packet[i] = FLAG;
+                        if(bcc2 == 0) {
+                            read_state = BCC2_OK;
+                        }
+                        
                     }
                     else if (packet[i] == 0x5d) {
                         packet[i] = ESC_OCT;
+                        if(bcc2 == 0) {
+                            read_state = BCC2_OK;
+                        }
                     }
                     else {
                         tcflush(fd, TCIOFLUSH);
                         char REJ[] = {FLAG, A_TR, C_REJ(n_seq), A_TR^C_REJ(n_seq), FLAG};
                         write(fd, REJ, sizeof(REJ));
                     }
-                    i++;
                     bcc2 = bcc2^packet[i];
+                    i++;
                     read_state = DATA;  // back to normal
-                break;
-            case BCC2_OK:
-                if (packet[i] == FLAG) {
-                    STOP = TRUE;
-                }
-                else
-                    read_state = START;
                 break;
             default:
                 break;
             }
-        } 
     } while (STOP == FALSE);
     
+    n_seq = n_seq^1;
     unsigned char RR[] = {FLAG, A_TR, C_RR(n_seq), A_TR^C_RR(n_seq), FLAG};
     write(fd, RR, sizeof(RR));
-    n_seq = n_seq^1;
-    
+    // Reset flag and bcc2 bytes
+    packet[i] = 0;
+    packet[i-1] = 0;
     return 0;
 }
 
@@ -500,12 +504,13 @@ int llclose(int showStatistics)
                 write(fd, DISC_TX, sizeof(DISC_TX));
             } while (STOP == FALSE && retransmissions > 0);
                
-            const unsigned char UA[] = {FLAG, A_RCV, C_UA, A_RCV^C_UA, FLAG};
+            const unsigned char UA[] = {FLAG, A_RC, C_UA, A_RC^C_UA, FLAG};
             write(fd, UA, sizeof(UA));
             
             break;
         case(LlRx): ;
             read_state = START;
+            STOP = FALSE;
             do {
                 int bytes = read(fd, buf, 1);
                 switch(read_state) {
@@ -555,20 +560,81 @@ int llclose(int showStatistics)
                         break;
                 }
             } while (STOP == FALSE);
-                
-            char DISC_RX[] = {FLAG, A_RCV, C_DISC, A_RCV^C_DISC, FLAG};
+            
+            char DISC_RX[] = {FLAG, A_RC, C_DISC, A_RC^C_DISC, FLAG};
             write(fd, DISC_RX, sizeof(DISC_RX));
+            read_state = START;
+            STOP = FALSE;
+            retransmissions = protocol.nRetransmissions;
+            do {
+            int bytes = read(fd, buf, 1);
+                    
+            if (bytes != 0) {
+                switch(read_state) {
+                    case START:
+                        if (buf[0] == FLAG) {
+                            read_state = FLAG_RCV;
+                            printf("Flag byte 1 received.\n");
+                        }
+                        break;
+                    case FLAG_RCV:
+                        if (buf[0] == A_RC) {
+                            read_state = A_RCV;
+                            printf("A byte received.\n");
+                        }
+                        else if(buf[0] != FLAG)
+                            read_state = START;
+                        break;
+                    case A_RCV:
+                        if(buf[0] == C_UA) {
+                            read_state = C_RCV;
+                            printf("C byte received.\n");
+                        }
+                        else if (buf[0] != FLAG)
+                            read_state = START;
+                        else
+                            read_state = FLAG_RCV;
+                        break;
+                    case C_RCV:
+                        if (buf[0] == (A_RC^C_UA)) {
+                            read_state = BCC_OK;
+                            printf("BCC byte received.\n");
+                        }
+                        else if (buf[0] != FLAG)
+                            read_state = START;
+                        else
+                            read_state = FLAG_RCV;
+                        break;
+                    case BCC_OK:
+                        if (buf[0] == FLAG) {
+                            STOP = TRUE;
+                            printf("Flag byte 2 received.\n");
+                        }
+                        else
+                            read_state = START;
+                        break;
+                    default:
+                        break;
+                }
+                continue;
+            }
+                
+            retransmissions--;
+            printf("Time out. Attempts left: %d\n", retransmissions);
+            read_state = START;
+            write(fd, DISC_RX, sizeof(DISC_RX));
+        } while (STOP == FALSE && retransmissions > 0);
             break;       
     }
     
-    // Restore the old port settings
-    //if (tcsetattr(fd, TCSANOW, &oldtio) == -1)
-    //{
-    //    perror("tcsetattr");
-    //    exit(-1);
-    //}
+    //Restore the old port settings
+    if (tcsetattr(fd, TCSANOW, &oldtio) == -1)
+    {
+        perror("tcsetattr");
+        exit(-1);
+    }
     
-    //printf("Closing.\n");
-    //close(fd);
+    printf("Closing.\n");
+    close(fd);
     return 1;
 }
