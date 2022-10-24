@@ -12,18 +12,25 @@
 
 // MISC
 #define _POSIX_SOURCE 1 // POSIX compliant source
-#define FLAG    0x7E        // Flag
-#define A_TR    0x03        // Address field in commands sent by the Transmitter and replies sent by the Receiver
-#define A_RC    0x01        // Address field in commands sent by the Receiver and replies sent by the Transmitter
-#define C_SET   0x03        // Control field for set up (SET)
-#define C_UA    0x07        // Control field for unnumbered acknowledgment (UA)
-#define C_DISC  0x0E        // Control field for disconection (DISC)
-typedef enum {START, FLAG_RCV, A_RCV, C_RCV, BCC_OK} readState_t;
+#define FLAG     0x7e        // Flag
+#define A_TR     0x03        // Address field in commands sent by the Transmitter and replies sent by the Receiver
+#define A_RC     0x01        // Address field in commands sent by the Receiver and replies sent by the Transmitter
+#define C_SET    0x03        // Control field for set up (SET)
+#define C_UA     0x07        // Control field for unnumbered acknowledgment (UA)
+#define C_DISC   0x0e        // Control field for disconection (DISC)
+#define C_RR(n)  (((0x00 + (n)) << 7) + 0x05) // Control field for frame I positive acknowledgement (RR)
+#define C_REJ(n) (((0x00 + (n)) << 7) + 0x01) // Control field for frame I rejection (REJ)
+#define C_SEQ(n) ((0x00 + (n)) << 6) // Control field for data frame, n = sequence number
+#define ESC_OCT  0x7d        // Escape character
+#define BYTE_ST  0x20        // Byte to perform the XOR comparison with the stuffed data byte
+
+typedef enum {START, FLAG_RCV, A_RCV, C_RCV, BCC_OK, DATA, STUFF, BCC2_OK} readState_t;
 
 volatile int STOP = FALSE;
 static readState_t read_state = START;
 static LinkLayer protocol;
 static int fd;
+static int n_seq;
 static struct termios oldtio;
 static struct termios newtio;
 ////////////////////////////////////////////////
@@ -215,8 +222,46 @@ int llopen(LinkLayer connectionParameters)
 ////////////////////////////////////////////////
 int llwrite(const unsigned char *buf, int bufSize)
 {
-    // TODO
-    //construir trama i, lembrar de stuff
+    unsigned char frame[2 * MAX_PAYLOAD_SIZE + 7] = {0}; // +7 to account for the other fields besides the data field, payload size doubled to account for stuffing
+    frame[0] = FLAG;
+    frame[1] = A_TR;
+    frame[2] = C_SEQ(n_seq);
+    frame[3] = frame[1]^frame[2];
+    
+    int i; // frame index
+    int offset = 0; // offset index (in case of byte stuffing)
+    int bcc2 = 0;
+    for(i = 0; i < bufSize; i++) {
+        if(buf[i] == FLAG) {
+            frame[i+4] = ESC_OCT;
+            offset++;
+            frame[i+4+offset] = buf[i]^BYTE_ST;
+        } else if (buf[i] == ESC_OCT) {
+            frame[i+4] = ESC_OCT;
+            offset++;
+            frame[i+4+offset] = buf[i]^BYTE_ST;
+        } else
+            frame[i+4+offset] = buf[i]; // add 4 to i as data field starts at index 4
+        bcc2 = bcc2^buf[i];
+    }
+    
+    i = i + 4 + offset; // Advance i to current frame index
+    if(bcc2 == FLAG) {
+        frame[i] = ESC_OCT;
+        frame[i+1] = bcc2^BYTE_ST;
+    } else if (bcc2 == ESC_OCT) {
+        frame[i] = ESC_OCT;
+        frame[i+1] = bcc2^BYTE_ST;
+    }
+    else frame[i] = bcc2;
+    frame[i+1] = FLAG; 
+    
+    for(int j = 0; j <= i+1; j++) {
+        printf("%02x ", frame[j]);
+    }
+    
+    //write(fd, frame, i+1);
+    /*
     switch(read_state) {
         case START:
             if (byte == FLAG) {
@@ -258,6 +303,8 @@ int llwrite(const unsigned char *buf, int bufSize)
         default:
             break;
         }
+        */
+    n_seq = n_seq^1;
     return 0;
 }
 
@@ -266,108 +313,116 @@ int llwrite(const unsigned char *buf, int bufSize)
 ////////////////////////////////////////////////
 int llread(unsigned char *packet)
 {
-    unsigned char reply = 0x00;
-    int counter = 0;
-    switch(read_state) {
-        case START:
-            if (byte == FLAG) {
-                read_state = FLAG_RCV;
-            }
-            break;
-        case FLAG_RCV:
-            if (byte == A_TR) {
-                read_state = A_RCV;
-            }
-            else if(byte != FLAG)
-                read_state = START;
-            break;
-        case A_RCV:
-            if(byte == C_I(n) {
-                read_state = C_RCV;
-            }
-            else if (byte == C_I(n^1)) // esperava 0, recebeu 1 (ou vice-versa)
-                read_state = DUPLICATE;
-            else if (byte != FLAG)
-                read_state = START;
-            else
-                read_state = FLAG_RCV;
-            break;
-        case C_RCV:
-            if (byte == A_TR^C_I(n)) {
-                read_state = BCC1_OK;
-            }
-            else if (byte != FLAG)
-                read_state = START;
-            else
-                read_state = FLAG_RCV;
-            break;
-        case BCC1_OK:
-                bcc2 = byte
-                counter++;
-                n = 1
-                read_state = READ;
-        case READ:
-            if (byte == FLAG) {
-                read_state = BCC2_ERROR
+    read_state = START;
+    STOP = FALSE;
+   
+    int i = 0;  // current index
+    int bcc2 = 0;
+    do {
+        int bytes = read(fd, packet[i], 1);
+        switch(read_state) {
+            case START:
+                if (packet[i] == FLAG) {
+                    read_state = FLAG_RCV;
+                    i++;
                 }
-            else if (byte == BCC2)
-                read_state = BCC2_OK;
-            else
-                if (bcc2 == 0x7d) 
-                    read_state = STUFF
+                break;
+            case FLAG_RCV:
+                if (packet[i] == A_TR) {
+                    read_state = A_RCV;
+                    i++;
+                }
+                else if(packet[i] != FLAG) {
+                    read_state = START;
+                    i = 0;
+                    memset(packet, 0, MAX_PAYLOAD_SIZE);
+                }
+                break;
+            case A_RCV:
+                if(packet[i] == C_SEQ(n_seq)) {
+                    read_state = C_RCV;
+                    i++;
+                }
+                else if (packet[i] == C_SEQ(n_seq^1)) { // received duplicate frame
+                    tcflush(fd, TCIOFLUSH);
+                    
+                    unsigned char RR[] = {FLAG, A_TR, C_RR(n_seq), A_TR^C_RR(n_seq), FLAG};
+                    write(fd, RR, sizeof(RR));
+                    return -1;
+                }
+                else if (packet[i] != FLAG) {
+                    read_state = START;
+                    i = 0;
+                }
+                else {
+                    read_state = FLAG_RCV;
+                    i = 1;
+                }
+                break;
+            case C_RCV:
+                if (packet[i] == A_TR^C_SEQ(n_seq)) {
+                    read_state = DATA;
+                    i++;
+                }
+                else if (packet[i] != FLAG) {
+                    read_state = START;
+                    i = 0;
+                }
+                else {
+                    read_state = FLAG_RCV;
+                    i = 1;
+                }
+                break;
+            case DATA:
+                if(packet[i] == FLAG) {    // FLAG received, implies BCC2 was incorrect, reject frame
+                    tcflush(fd, TCIOFLUSH);
+                    char REJ[] = {FLAG, A_TR, C_REJ(n_seq), A_TR^C_REJ(n_seq), FLAG};
+                    write(fd, REJ, sizeof(REJ));
+                    return -1;
+                }
+                else if(packet[i] == ESC_OCT) {
+                    read_state = STUFF;
+                    continue;
+                } 
+                else {
+                    bcc2 = bcc2^packet[i];
+                    if(bcc2 == 0) {
+                        read_state = BCC2_OK;
+                }
+                break;
+            case STUFF:
+                    if(packet[i] == 0x5e){
+                        packet[i] = FLAG;
+                    }
+                    else if (packet[i] == 0x5d) {
+                        packet[i] = ESC_OCT;
+                    }
+                    else {
+                        tcflush(fd, TCIOFLUSH);
+                        char REJ[] = {FLAG, A_TR, C_REJ(n_seq), A_TR^C_REJ(n_seq), FLAG};
+                        write(fd, REJ, sizeof(REJ));
+                    }
+                    i++;
+                    bcc2 = bcc2^packet[i];
+                    read_state = DATA;  // back to normal
+                break;
+            case BCC2_OK:
+                if (packet[i] == FLAG) {
+                    STOP = TRUE;
+                }
                 else
-                    counter++;
-                    packet[counter] = byte;
-                    bcc2 = bcc2^byte;
-        case STUFF:
-                if(byte == 0x5e){
-                    byte = 0x7e
-                }
-                else {byte = 0x7d}
-                counter++;
-                packet[counter] = byte;
-                bcc2 = bcc2^byte;
-                read_state = READ;  //back to normal
-            break;
-        case BCC2_OK:
-            if (byte == FLAG) {
-                STOP = TRUE;
-                //send RR
-                reply[7] = n;
-                reply[0] = 1;
-                reply[2] = 1;
-                char SET[] = {FLAG, A_TR, reply, A_TR^reply, FLAG};
-                write(fd, SET, sizeof(SET));
-                //
-                n = n^1
+                    read_state = START;
+                break;
+            default:
+                break;
             }
-            else
-                read_state = START;
-            break;
-        case BCC2_ERROR:
-            if (byte == FLAG) {
-                STOP = TRUE;
-                //send REJ
-                reply[7] = n;
-                reply[0] = 1;
-                char SET[] = {FLAG, A_TR, reply, A_TR^reply, FLAG};
-                write(fd, SET, sizeof(SET));
-                //
-            }
-            else
-                read_state = START;
-            break;
-        case DUPLICATE:
-            //send RR
-            reply[7] = n;
-            reply[0] = 1;
-            reply[2] = 1;
-            char SET[] = {FLAG, A_TR, reply, A_TR^reply, FLAG};
-            write(fd, SET, sizeof(SET));
-            //
-        default:
-            break;
-        }
+        } 
+    } while (STOP == FALSE);
+    
+    unsigned char RR[] = {FLAG, A_TR, C_RR(n_seq), A_TR^C_RR(n_seq), FLAG};
+    write(fd, RR, sizeof(RR));
+    n_seq = n_seq^1;
+    
     return 0;
 }
 

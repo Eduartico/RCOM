@@ -26,11 +26,13 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
     
     switch(connectionParameters.role) {
         case LlTx: ;
-            char ctrl_pkg[] = {C(2), NAME, sizeof(filename)};
+            unsigned char ctrl_pkg[3] = {C(2), NAME, sizeof(filename)};
             strcat(ctrl_pkg, filename);
-            
+            for(int i = 0; i < sizeof(ctrl_pkg) + sizeof(filename); i++)
+                printf("%02x ", ctrl_pkg[i]);
+            printf("\n");
             llwrite(ctrl_pkg, sizeof(ctrl_pkg) + sizeof(filename));
-            
+
             FILE* fptr = fopen(filename, "r");
             if(fptr == NULL) {
                 perror("Filename doesn't exit.\n");
@@ -52,13 +54,14 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
                 memcpy(data_pkg, data_pkg_header, sizeof(data_pkg_header));
                 memcpy(data_pkg + 4, data, bytes);
                 
-                //for(int i = 0; i < sizeof(data_pkg_header) + bytes; i++)
-                    //printf("%02x i = %d \n", data_pkg[i], i);
-                    
+                /* 
+                for(int i = 0; i < sizeof(data_pkg_header) + bytes; i++)
+                    printf("%02x i = %d \n", data_pkg[i], i);
+   
                 printf("Bytes read = %d \n"
                        "L1 = %d ; L2 = %d \n"
                        "Sequence no. = %d \n", bytes, l1, l2, seq_n);
-                       
+                */      
                 llwrite(data_pkg, data_pkg_size);
                 seq_n++;
                 free(data_pkg);
@@ -75,11 +78,14 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
             int STOP = FALSE;
             
             while(STOP == FALSE) {
-                llread(rcv_pkg);
-                printf("%d \n", rcv_pkg[0]);
+                int ret = llread(rcv_pkg);
                 switch(rcv_pkg[0]) {
                     case C(1):
-                        // write to file
+                        if(ret == -1)
+                            continue;
+                        for(int i = 0; i < MAX_PAYLOAD_SIZE; i++) {
+                            printf("%02x ", rcv_pkg[i]);
+                        }
                         break;
                     case C(2): ;
                         int i = 1;
@@ -109,5 +115,5 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
             break;
     }
         
-    llclose(0);
+    //llclose(0);
 }
