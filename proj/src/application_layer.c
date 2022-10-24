@@ -21,17 +21,21 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
     connectionParameters.nRetransmissions = nTries;
     connectionParameters.timeout = timeout * 10;
     
-    //if(llopen(connectionParameters) == -1)
-    //return;
+    if(llopen(connectionParameters) == -1)
+        return;
     
     switch(connectionParameters.role) {
         case LlTx: ;
-            unsigned char ctrl_pkg[3] = {C(2), NAME, sizeof(filename)};
-            strcat(ctrl_pkg, filename);
-            for(int i = 0; i < sizeof(ctrl_pkg) + sizeof(filename); i++)
-                printf("%02x ", ctrl_pkg[i]);
-            printf("\n");
-            llwrite(ctrl_pkg, sizeof(ctrl_pkg) + sizeof(filename));
+            unsigned char* ctrl_pkg = malloc(3 + sizeof(filename) + 3);
+            *ctrl_pkg = C(2);
+            *(ctrl_pkg + 1) = NAME;
+            *(ctrl_pkg + 2) = sizeof(filename) + 3;
+            memcpy((ctrl_pkg + 3), filename, sizeof(filename) + 3);
+            //for(int i = 0; i < sizeof(ctrl_pkg) + sizeof(filename); i++)
+                //printf("%02x ", ctrl_pkg[i]);
+            //printf("\n");
+            if(llwrite(ctrl_pkg, sizeof(ctrl_pkg) + sizeof(filename)) == -1)
+                return;
 
             FILE* fptr = fopen(filename, "r");
             if(fptr == NULL) {
@@ -62,7 +66,10 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
                        "L1 = %d ; L2 = %d \n"
                        "Sequence no. = %d \n", bytes, l1, l2, seq_n);
                 */      
-                llwrite(data_pkg, data_pkg_size);
+                if (llwrite(data_pkg, data_pkg_size) == -1)
+                    break;
+                    
+                //sleep(1);
                 seq_n++;
                 free(data_pkg);
                 bytes = fread(data, 1, MAX_BYTES_READ, fptr);
@@ -71,7 +78,7 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
             fclose(fptr);
             
             ctrl_pkg[0] = C(3);
-            //llwrite(ctrl_pkg, sizeof(ctrl_pkg) + sizeof(filename));
+            llwrite(ctrl_pkg, sizeof(ctrl_pkg) + sizeof(filename));
             break;
         case LlRx: ;
             unsigned char rcv_pkg[MAX_PAYLOAD_SIZE] = {0};
@@ -108,12 +115,12 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
                     case C(3):
                         printf("File closed \n");
                         STOP = TRUE;
-                        //fclose(fptr);
+                        fclose(fptr);
                         break;
                 }
             }
             break;
     }
         
-    //llclose(0);
+    llclose(0);
 }
