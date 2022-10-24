@@ -78,27 +78,30 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
             fclose(fptr);
             
             ctrl_pkg[0] = C(3);
+
             llwrite(ctrl_pkg, sizeof(ctrl_pkg) + sizeof(filename));
             break;
         case LlRx: ;
             unsigned char rcv_pkg[MAX_PAYLOAD_SIZE] = {0};
             int STOP = FALSE;
-            
+            FILE* fptrrx;
             while(STOP == FALSE) {
+                memset(rcv_pkg, 0, MAX_PAYLOAD_SIZE);
                 int ret = llread(rcv_pkg);
+                if(ret == -1)
+                    continue;
                 switch(rcv_pkg[0]) {
-                    case C(1):
-                        if(ret == -1)
-                            continue;
-                        for(int i = 0; i < MAX_PAYLOAD_SIZE; i++) {
-                            printf("%02x ", rcv_pkg[i]);
-                        }
+                    case C(1): ;
+                        //for(int i = 0; i < MAX_PAYLOAD_SIZE; i++) {
+                            //printf("%02x ", rcv_pkg[i]);
+                        //}
+                        int pkg_size = 256 * rcv_pkg[2] + rcv_pkg[3];
+                        fwrite(&rcv_pkg[4], 1, pkg_size, fptrrx);
                         break;
                     case C(2): ;
                         int i = 1;
                         vtype_t param_type;
                         char file_name[50] = {0};
-                        
                         do {
                         param_type = rcv_pkg[i];
                         size_t param_length = rcv_pkg[i+1];
@@ -110,12 +113,12 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
                         } while(param_type < 1);
                         
                         printf("filename = %s \n", file_name);
-                        FILE* fptr = fopen(filename, "w");
+                        fptrrx = fopen(file_name, "w");
                         break;
                     case C(3):
                         printf("File closed \n");
                         STOP = TRUE;
-                        fclose(fptr);
+                        fclose(fptrrx);
                         break;
                 }
             }
