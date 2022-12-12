@@ -6,49 +6,13 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <unistd.h>
-
 #include <string.h>
 
 #define MAX_BUF_SIZE	1024
 #define CTRL_PORT 		21
-#define MAX_TIMEOUT		3
 
-/*
-int read_data_port(int sockfd, char* address[16]) {
-	char buffer[MAX_BUF_SIZE] = {0};
-	int bytes;
-	char delim[] = "(),";
-	char dot = '.';
-	
-	sleep(1);	// Delay execution to give server time to send data
-	while((bytes = read(sockfd, buffer, MAX_BUF_SIZE)) > 0) {
-    	printf("Bytes read: %d\n", bytes); 
-    	printf("%s", buffer);
-    }
-    
-    strtok(buffer, delim);
-    //printf("%s\n", *address);
-    printf("hello\n");
-    strcat(*(address), strtok(NULL, delim));
-    printf("%s\n", *address);
-    strncat(*(address), &dot, 1);
-    printf("%s\n", *address);
-    strcat(*(address), strtok(NULL, delim));
-    strncat(*(address), &dot, 1);
-    printf("%s\n", address);
-    printf("%s\n", strtok(NULL, delim));
-    printf("%s\n", strtok(NULL, delim));
-    
-    
-    int part1 = strtol(strtok(NULL, delim), NULL, 10);
-    int part2 = strtol(strtok(NULL, delim), NULL, 10);
-	int port = 256*part1 + part2;
-	
-    return port;
-}   
-*/
-
-void read_data_socket(int sockfd, char* filepath, int filesize) {
+/* Read from data socket */
+long int read_data_socket(int data_sockfd, char* filepath, long int filesize) {
 	FILE* fileptr;
 	
 	char* tok = strtok(filepath, "/");
@@ -58,32 +22,28 @@ void read_data_socket(int sockfd, char* filepath, int filesize) {
 		
 	fileptr = fopen(filename, "w");
 	
-	//read from socket and write to file
+	/*read from socket and write to file*/
 	char buffer[MAX_BUF_SIZE] = {0};
-	memset(buffer, 0, MAX_BUF_SIZE);
-	
-	int current_filesize = filesize;
-	int condition;
+
 	int bytes;
-	
-	while(current_filesize > 0) {
-		if(current_filesize >= MAX_BUF_SIZE) {
-			condition = MAX_BUF_SIZE;
-			current_filesize -= MAX_BUF_SIZE;
-		}
-		else {
-			condition = current_filesize;
-			current_filesize = 0;
-		}
-		
-		bytes = read(sockfd, buffer, MAX_BUF_SIZE);
+	long int totalbytes = 0;
+	while(filesize > 0) {
+		memset(buffer, 0, MAX_BUF_SIZE);
+		bytes = read(data_sockfd, buffer, MAX_BUF_SIZE);
+		//printf("Bytes received: %d\n", bytes);
+
 		fwrite(buffer, 1, bytes, fileptr);
-		
+		filesize -= bytes;
+		totalbytes += bytes;
+
 	}
 	
 	fclose(fileptr);
+	//printf("Bytes left: %ld\n", current_filesize);
+	return totalbytes;
 }
 
+/* Read from socket */
 void read_socket(int sockfd) {	
 	char buffer[MAX_BUF_SIZE] = {0};
 	int bytes;
@@ -95,6 +55,7 @@ void read_socket(int sockfd) {
     }
 }
 
+/* Write to socket */
 void write_socket(int sockfd, char* command) {	
 	int bytes = write(sockfd, command, strlen(command));
     write(sockfd, "\n", 1);
@@ -111,7 +72,7 @@ int main(int argc, char *argv[]) {
     struct hostent *h;
 
     if (argc != 2) {
-        fprintf(stderr, "Usage: %s <address to get IP address>\n", argv[0]);
+        fprintf(stderr, "Usage: %s ftp://[<user>:<password>@]<host>/<url-path>\n", argv[0]);
         exit(-1);
     }
 	
@@ -124,7 +85,7 @@ int main(int argc, char *argv[]) {
 	char* urlpath = strtok(NULL, ""); 
 	printf("Username: %s\nPassword: %s\nHost: %s\nPath: %s\n", username, password, hostname, urlpath);
 	
-	
+// --- CTRL CONNECTION SETUP
     if ((h = gethostbyname(hostname)) == NULL) {
         herror("gethostbyname()");
         exit(-1);
@@ -165,35 +126,15 @@ int main(int argc, char *argv[]) {
     	perror("ioctl()");
     	exit(-1);
     }
+// ---
     
-    /*read data from server*/
+    /*read welcome message*/
     char buffer[MAX_BUF_SIZE] = {0};
     int bytes;
-    //int count = 0;
-    //while(timeout < MAX_TIMEOUT) {
-    //	bytes = read(sockfd, buffer, MAX_BUF_SIZE);
-    //	printf("%d\n",bytes);
-    //	if(bytes != -1) {
-    //		//printf("%d\nCount: %d\n", bytes, count);
-    //		count = 0; }
-    //	else {
-    //		count++;
-    //		sleep(0.5);
-    //		}
-    //}
-	//int responses = 0;
-	//sleep(1);	// Pause program while connection is established
-	//(bytes = read(sockfd, buffer, MAX_BUF_SIZE)) > 0
-    //while((bytes = read(sockfd, buffer, MAX_BUF_SIZE)) > 0) {
-    //	printf("Bytes read: %d\n", bytes); 
-    //	printf("%s", buffer);
-    	//if(strstr(buffer, "\r\n") != NULL)
-    	//	responses++;
-    //}
-    
+      
 	read_socket(sockfd);
 	
-    /*send a string to the server*/
+    /*login to server*/
     char command[] = "USER ";
     strcat(command, username);
     write_socket(sockfd, command);
@@ -207,18 +148,17 @@ int main(int argc, char *argv[]) {
     
     read_socket(sockfd);
     
+    /*enter passive mode*/
     memset(command, 0, sizeof(command));
     strcpy(command, "PASV");
     write_socket(sockfd, command);
 
-// GET DATA PORT   
-    char data_address[16] = {0};
-    //int data_port = read_data_port(sockfd, &data_address);
-    //printf("%d\n", data_port);
-    
+// --- GET DATA PORT   
+    char data_address[16] = {0};   
 	char delim2[] = "(),";
 	char dot = '.';
 	
+	/*read response from server after entering pass mode*/
 	memset(buffer, 0, sizeof(buffer));
 	sleep(1);	// Delay execution to give server time to send data
 	while((bytes = read(sockfd, buffer, MAX_BUF_SIZE)) > 0) {
@@ -226,6 +166,7 @@ int main(int argc, char *argv[]) {
     	printf("%s", buffer);
     }
     
+    /* parse response for ip address and port*/
     strtok(buffer, delim2);
     strcat(data_address, strtok(NULL, delim2));
     strncat(data_address, &dot, 1);
@@ -237,17 +178,17 @@ int main(int argc, char *argv[]) {
 
     int part1 = strtol(strtok(NULL, delim2), NULL, 10);
     int part2 = strtol(strtok(NULL, delim2), NULL, 10);
-	int data_port = 256*part1 + part2;
+    int data_port = 256*part1 + part2;
 	
 	//printf("Address: %s\n", data_address);
 	//printf("Port: %d\n", data_port);
-	
+// ---
+
+// --- CONNECT DATA PORT    
 	/*build data socket*/
 	int data_sockfd;
     struct sockaddr_in data_server_addr;
-//---
-
-// CONNECT DATA PORT    
+    
     /*server address handling*/
     bzero((char *) &data_server_addr, sizeof(data_server_addr));
     data_server_addr.sin_family = AF_INET;
@@ -268,8 +209,9 @@ int main(int argc, char *argv[]) {
         perror("connect()");
         exit(-1);
     }
-//---
+// ---
 
+	/*get size of file to download*/
 	memset(command, 0, sizeof(command));
     strcpy(command, "SIZE ");
     strcat(command, urlpath); 
@@ -282,17 +224,25 @@ int main(int argc, char *argv[]) {
     	printf("%s", buffer);
     }
     
+    /*parse response from server to retrive file size */
     strtok(buffer, " ");
-    int filesize = strtol(strtok(NULL, "\n"), NULL, 10);
+    long int filesize = strtol(strtok(NULL, "\n"), NULL, 10);
     
+    /*send command to download file*/
 	memset(command, 0, sizeof(command));
     strcpy(command, "RETR ");
     strcat(command, urlpath); 
     write_socket(sockfd, command);
        
     read_socket(sockfd);
-    read_data_socket(data_sockfd, urlpath, filesize);
     
+    /*read from data socket to retrieve the file*/
+    long int size_read = read_data_socket(data_sockfd, urlpath, filesize);
+    //printf("Filesize: %ld\nBytes received: %ld\n", filesize, size_read);
+    
+    read_socket(sockfd);
+    
+    /*send command to close connection*/
     memset(command, 0, sizeof(command));
     strcpy(command, "QUIT");
     write_socket(sockfd, command);
