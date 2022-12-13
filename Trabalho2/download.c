@@ -14,12 +14,16 @@
 /* Read from data socket */
 long int read_data_socket(int data_sockfd, char* filepath, long int filesize) {
 	FILE* fileptr;
-	
-	char* tok = strtok(filepath, "/");
 	char filename[128] = {0};
-	while((tok = strtok(NULL, "/")) != NULL)
-		strcpy(filename, tok);
-		
+    
+    if(strchr(filepath, '/') == NULL) 
+        strcpy(filename, filepath);
+    else {
+        char* tok = strtok(filepath, "/");
+	    while((tok = strtok(NULL, "/")) != NULL)
+		    strcpy(filename, tok);
+    }
+    printf("filename %s\n", filename);
 	fileptr = fopen(filename, "w");
 	
 	/*read from socket and write to file*/
@@ -37,7 +41,7 @@ long int read_data_socket(int data_sockfd, char* filepath, long int filesize) {
 		totalbytes += bytes;
 
 	}
-	
+
 	fclose(fileptr);
 	//printf("Bytes left: %ld\n", current_filesize);
 	return totalbytes;
@@ -241,7 +245,7 @@ int main(int argc, char *argv[]) {
     //printf("Filesize: %ld\nBytes received: %ld\n", filesize, size_read);
     
     read_socket(sockfd);
-    
+
     /*send command to close connection*/
     memset(command, 0, sizeof(command));
     strcpy(command, "QUIT");
